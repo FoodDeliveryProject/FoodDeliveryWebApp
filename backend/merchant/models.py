@@ -14,47 +14,42 @@ class Merchant(models.Model):
     )])
 
 
-class Restaurant:
-    def __init__(self, restaurant_id, store_name, store_contact_name, contact_number, secondary_contact_number=None, city=None, store_address=None, cuisine=None, latitude=None, longitude=None):
-        self.restaurant_id = restaurant_id
-        self.store_name = store_name
-        self.store_contact_name = store_contact_name
-        self.contact_number = contact_number
-        self.secondary_contact_number = secondary_contact_number
-        self.city = city
-        self.store_address = store_address
-        self.cuisine = cuisine
-        self.latitude = latitude
-        self.longitude = longitude
+
+class AppUser(models.Model):  # renamed to avoid conflict with Django's User
+    name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=15, validators=[phone_validator])
+    address = models.TextField()
 
     def __str__(self):
-        info = f"Restaurant ID: {self.restaurant_id}, Store Name: {self.store_name}, Contact: {self.store_contact_name} ({self.contact_number})"
-        if self.secondary_contact_number:
-            info += f", Secondary Contact: {self.secondary_contact_number}"
-        if self.city:
-            info += f", City: {self.city}"
-        if self.store_address:
-            info += f", Address: {self.store_address}"
-        if self.cuisine:
-            info += f", Cuisine: {self.cuisine}"
-        if self.latitude is not None and self.longitude is not None:
-            info += f", Location: ({self.latitude}, {self.longitude})"
-        return info
+        return f"{self.name} ({self.phone_number})"
 
 
-class FoodItem:
-    def __init__(self, item_id, name, description, price, restaurant_id):
-        self.item_id = item_id
-        self.name = name
-        self.description = description
-        self.price = price
-        self.restaurant_id = restaurant_id
+class Restaurant(models.Model):
+    store_name = models.CharField(max_length=255)
+    store_contact_name = models.CharField(max_length=255)
+    contact_number = models.CharField(max_length=15, validators=[phone_validator])
+    secondary_contact_number = models.CharField(max_length=15, validators=[phone_validator], blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    store_address = models.TextField(blank=True, null=True)
+    cuisine = models.CharField(max_length=100, blank=True, null=True)
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
 
     def __str__(self):
-        return f"Item ID: {self.item_id}, Name: {self.name}, Price: Rs. {self.price:.2f} (Restaurant ID: {self.restaurant_id})"
+        return f"{self.store_name} - {self.city or 'No city'}"
 
 
-class Order:
+class FoodItem(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    price = models.FloatField()
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='food_items')
+
+    def __str__(self):
+        return f"{self.name} - Rs. {self.price:.2f}"
+
+
+class Order(models.Model):
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
         ('PROCESSING', 'Processing'),
@@ -63,55 +58,41 @@ class Order:
         ('CANCELLED', 'Cancelled'),
     ]
 
-    def __init__(self, order_id, user_id, restaurant_id, order_date=None, status='PENDING'):
-        self.order_id = order_id
-        self.user_id = user_id
-        self.restaurant_id = restaurant_id
-        self.order_date = order_date if order_date else datetime.now()
-        self.status = status
-        self.items = []
-
-    def add_item(self, food_item, quantity=1):
-        self.items.append({'item': food_item, 'quantity': quantity})
+    user = models.ForeignKey(AppUser, on_delete=models.CASCADE, related_name='orders')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='orders')
+    order_date = models.DateTimeField(default=datetime.now)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
 
     def calculate_total(self):
-        total = 0
-        for item_data in self.items:
-            total += item_data['item'].price * item_data['quantity']
-        return total
+        return sum(item.food_item.price * item.quantity for item in self.items.all())
 
     def __str__(self):
-        item_details = "\n  - ".join(
-            [f"{item['item'].name} (x{item['quantity']})" for item in self.items])
-        return (f"Order ID: {self.order_id}, User ID: {self.user_id}, Restaurant ID: {self.restaurant_id}, "
-                f"Date: {self.order_date.strftime('%Y-%m-%d %H:%M:%S')}, Status: {self.status}\n"
-                f"Items:\n  - {item_details}\n"
-                f"Total: Rs. {self.calculate_total():.2f}")
+        return f"Order #{self.pk} by {self.user.name}"
 
 
-class DeliveryPersonnel:
-    def __init__(self, personnel_id, name, phone_number, vehicle_type, latitude=None, longitude=None, current_order_id=None):
-        self.personnel_id = personnel_id
-        self.name = name
-        self.phone_number = phone_number
-        self.vehicle_type = vehicle_type
-        self.latitude = latitude
-        self.longitude = longitude
-        self.current_order_id = current_order_id
-
-    def assign_order(self, order_id):
-        self.current_order_id = order_id
-
-    def unassign_order(self):
-        self.current_order_id = None
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    food_item = models.ForeignKey(FoodItem, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
 
     def __str__(self):
-        status = f"Currently assigned to Order ID: {self.current_order_id}" if self.current_order_id else "Currently available"
-        location_str = f"Location: ({self.latitude}, {self.longitude})" if self.latitude is not None and self.longitude is not None else "Location: (Not Available)"
-        return f"Personnel ID: {self.personnel_id}, Name: {self.name}, {location_str}, Status: {status}"
+        return f"{self.food_item.name} x{self.quantity}"
 
 
-class Delivery:
+class DeliveryPersonnel(models.Model):
+    name = models.CharField(max_length=255)
+    phone_number = models.CharField(max_length=15, validators=[phone_validator])
+    vehicle_type = models.CharField(max_length=50)
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
+    current_order = models.OneToOneField(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_personnel')
+
+    def __str__(self):
+        status = f"Assigned to Order #{self.current_order.pk}" if self.current_order else "Available"
+        return f"{self.name} - {status}"
+
+
+class Delivery(models.Model):
     STATUS_CHOICES = [
         ('ASSIGNED', 'Assigned'),
         ('PICKED_UP', 'Picked Up'),
@@ -120,32 +101,12 @@ class Delivery:
         ('FAILED', 'Failed'),
     ]
 
-    def __init__(self, delivery_id, order_id, personnel_id, delivery_address, assigned_time=None, status='ASSIGNED'):
-        self.delivery_id = delivery_id
-        self.order_id = order_id
-        self.personnel_id = personnel_id
-        self.delivery_address = delivery_address
-        self.assigned_time = assigned_time if assigned_time else datetime.now()
-        self.status = status
-        self.delivery_time = None
-
-    def mark_as_picked_up(self):
-        self.status = 'PICKED_UP'
-
-    def mark_as_in_transit(self):
-        self.status = 'IN_TRANSIT'
-
-    def mark_as_delivered(self):
-        self.status = 'DELIVERED'
-        self.delivery_time = datetime.now()
-
-    def mark_as_failed(self):
-        self.status = 'FAILED'
-        self.delivery_time = datetime.now()
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='delivery')
+    personnel = models.ForeignKey(DeliveryPersonnel, on_delete=models.SET_NULL, null=True, related_name='deliveries')
+    delivery_address = models.TextField()
+    assigned_time = models.DateTimeField(default=datetime.now)
+    delivery_time = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ASSIGNED')
 
     def __str__(self):
-        delivery_time_str = self.delivery_time.strftime(
-            '%Y-%m-%d %H:%M:%S') if self.delivery_time else 'Not yet delivered'
-        return (f"Delivery ID: {self.delivery_id}, Order ID: {self.order_id}, Personnel ID: {self.personnel_id}, "
-                f"Delivery Address: {self.delivery_address}, Assigned Time: {self.assigned_time.strftime('%Y-%m-%d %H:%M:%S')}, "
-                f"Status: {self.status}, Delivery Time: {delivery_time_str}")
+        return f"Delivery #{self.pk} - Status: {self.status}"
