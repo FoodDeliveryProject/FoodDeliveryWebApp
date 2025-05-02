@@ -156,11 +156,11 @@ class DeliveryVehicle(models.Model):
     VehicleNumberplate=models.CharField(max_length=13)
 
 class Deliveryman(models.Model):
-    DeliveryType_choice=[
-        { ('Freelance', 'Freelancer'),
-        ('Salarybased', 'Salarybased'),}
+    DeliveryType_choice = [
+        ('Freelance', 'Freelancer'),
+        ('Salarybased', 'Salarybased'),
     ]
-    Zone_choice=[
+    Zone_choice = [
         ('Kathmandu', 'Kathmandu'),
         ('Bhaktapur', 'Bhaktapur'),
     ]
@@ -168,16 +168,20 @@ class Deliveryman(models.Model):
         ('day', 'Day(10AM-6PM)'),
         ('night', 'Night(6PM-2AM)'),
     ]
-    Firstname=models.CharField(max_length=100)
-    Lastname=models.CharField(max_length=100)
-    Email=models.EmailField()
-    DeliveryType=models.CharField(choices=DeliveryType_choice)
-    Zone=models.CharField(choices=Zone_choice)
-    Vehicle=models.ForeignKey(DeliveryVehicle)
-    IdentityNumber=models.IntegerField(max_length=10,blank=False)
-    IdentityImage=models.ImageField()
-    PanNumber=models.IntegerField(max_length=9)
-    DutyTime=models.CharField(choices=Dutytime_choices)
-    DateofBirth=models.DateField()
-    UserImage=models.ImageField()
+
+    Firstname = models.CharField(max_length=100)
+    Lastname = models.CharField(max_length=100)
+    Email = models.EmailField()
+    DeliveryType = models.CharField(max_length=20, choices=DeliveryType_choice)
+    Zone = models.CharField(max_length=20, choices=Zone_choice)
+    Vehicle = models.ForeignKey(DeliveryVehicle, on_delete=models.CASCADE, related_name='deliverymen')
+    IdentityNumber = models.CharField(max_length=10)
+    IdentityImage = models.ImageField(upload_to='identities/')
+    PanNumber = models.CharField(max_length=9)
+    DutyTime = models.CharField(max_length=20, choices=Dutytime_choices)
+    DateofBirth = models.DateField()
+    UserImage = models.ImageField(upload_to='users/')
+
+    def __str__(self):
+        return f"{self.Firstname} {self.Lastname} - {self.Zone}"
 
