@@ -163,6 +163,7 @@ class Deliveryman(models.Model):
     Zone_choice = [
         ('Kathmandu', 'Kathmandu'),
         ('Bhaktapur', 'Bhaktapur'),
+        ('Lalitpur', 'Lalitpur'),
     ]
     Dutytime_choices = [
         ('day', 'Day(10AM-6PM)'),
