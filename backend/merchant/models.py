@@ -181,13 +181,10 @@ class Deliveryman(models.Model):    #to record the offficial details about the d
         ('Lalitpur', 'Lalitpur'),
     ]
     DUTYTIME_CHOICES = [
-    ('morning', 'Morning (6AM–10AM)'),
-    ('late_morning', 'Late Morning (10AM–2PM)'),
-    ('afternoon', 'Afternoon (2PM–6PM)'),
-    ('evening', 'Evening (6PM–10PM)'),
-    ('night', 'Night (10PM–2AM)'),
-    ('late_night', 'Late Night (2AM–6AM)'),
+    ('day', 'Day (10AM–6PM)'),
+    ('night', 'Night (6PM–2AM)'),
     ]
+
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='deliveryman_profile', null=True)
     Firstname = models.CharField(max_length=100)
@@ -213,7 +210,7 @@ class Deliveryman(models.Model):    #to record the offficial details about the d
     DutyTime = models.CharField(
     max_length=20,
     choices=DUTYTIME_CHOICES,
-    default='morning',
+    default='day',
     )
 
     VehicleNumber = models.CharField(max_length=13, validators=[vehicle_validator], help_text="Enter the vehicle number in capital letters (e.g., BA 2 PA 1234 or 3-01-Pa-1234).", null=True)
