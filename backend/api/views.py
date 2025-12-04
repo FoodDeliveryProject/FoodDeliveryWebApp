@@ -1779,3 +1779,76 @@ def most_ordered_food(request):
         })
 
     return Response(data, status=status.HTTP_200_OK)
+
+
+@login_required
+def all_restaurants_api(request):
+
+    restaurants = Restaurant.objects.all()
+    data = []
+
+    for restaurant in restaurants:
+        data.append({
+            'name': restaurant.restaurant_name,
+            'address': restaurant.restaurant_address,
+            'cuisine': restaurant.cuisine,
+            'description': restaurant.description,
+            'restaurant_type': restaurant.restaurant_type,
+            'profile_picture': restaurant.profile_picture.url if restaurant.profile_picture else None,
+        })
+
+    return JsonResponse({'restaurants': data}, safe=False)
+
+
+
+
+@login_required
+def restaurant_food_item_detail_api(request):
+    """
+    API to return a single restaurant's details with all its food items.
+    Expects query parameter: ?restaurant_id=30
+    """
+    restaurant_id = request.GET.get('restaurant_id')
+
+    if not restaurant_id:
+        return JsonResponse({'error': 'restaurant_id query parameter is required.'}, status=400)
+
+    try:
+        restaurant = Restaurant.objects.get(id=restaurant_id)
+    except Restaurant.DoesNotExist:
+        return JsonResponse({'error': 'Restaurant not found.'}, status=404)
+
+    # Restaurant data
+    restaurant_data = {
+        'name': restaurant.restaurant_name,
+        'address': restaurant.restaurant_address,
+        'cuisine': restaurant.cuisine,
+        'description': restaurant.description,
+        'restaurant_type': restaurant.restaurant_type,
+        'profile_picture': restaurant.profile_picture.url if restaurant.profile_picture else None,
+    }
+
+    # Food items
+    food_items_qs = FoodItem.objects.filter(restaurant=restaurant)
+    food_items_data = []
+
+    for item in food_items_qs:
+        food_items_data.append({
+            'name': item.name,
+            'price': float(item.price),
+            'discount': float(item.discount),
+            'description': item.description,
+            'veg_nonveg': item.veg_nonveg,
+            'availability_status': item.availability_status,
+            'review_rating': item.review_rating,
+            'profile_picture': item.profile_picture.url if item.profile_picture else None,
+            'external_image_url': item.external_image_url,
+        })
+
+    # Combine restaurant and food items
+    response_data = {
+        'restaurant': restaurant_data,
+        'food_items': food_items_data
+    }
+
+    return JsonResponse(response_data, safe=False)

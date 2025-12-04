@@ -1,4 +1,4 @@
-from .models import Deliveryman, DeliverymanStatus, Order
+from .models import Deliveryman, DeliverymanStatus, Order, Restaurant
 from django.views.decorators.http import require_GET
 from django.http import JsonResponse, HttpResponseBadRequest, Http404
 from django.views.decorators.http import require_http_methods
