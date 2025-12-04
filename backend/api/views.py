@@ -1742,24 +1742,40 @@ def most_discounted_food(request):
 
     return Response(data, status=status.HTTP_200_OK)
 
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def most_ordered_food(request):
     food_stats = (
         OrderItemHistory.objects
-        .values('food_item', 'food_item__name')
+        .values('food_item')
         .annotate(total_ordered=Sum('quantity'))
         .order_by('-total_ordered')[:5]
     )
 
-    data = [
-        {
-            'food_item_id': item['food_item'],
-            'food_name': item['food_item__name'],
-            'total_ordered_quantity': item['total_ordered']
-        }
-        for item in food_stats
-    ]
+    data = []
+    for item in food_stats:
+        try:
+            food = FoodItem.objects.get(id=item['food_item'])
+        except FoodItem.DoesNotExist:
+            continue
+
+        price = food.price or 0
+        discount_percent = food.discount or 0
+        discounted_price = price - (price * discount_percent / 100)
+
+        data.append({
+            "id": food.id,
+            "name": food.name,
+            "price": str(price),
+            "discount": str(discount_percent),
+            "discounted_price": str(round(discounted_price, 2)),
+            "description": food.description,
+            "restaurant": food.restaurant.id if food.restaurant else None,
+            "veg_nonveg": food.veg_nonveg,
+            "profile_picture": food.profile_picture.url if food.profile_picture else food.external_image_url,
+            "availability_status": food.availability_status,
+            "review_rating": food.review_rating,
+            "total_ordered_quantity": item['total_ordered'],
+        })
 
     return Response(data, status=status.HTTP_200_OK)
