@@ -47,6 +47,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import get_object_or_404
+from django.db.models import Sum
 
 
 def api_overview(request):
@@ -1738,5 +1739,27 @@ def most_discounted_food(request):
             "review_rating": food.review_rating,
         }
         data.append(item)
+
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def most_ordered_food(request):
+    food_stats = (
+        OrderItemHistory.objects
+        .values('food_item', 'food_item__name')
+        .annotate(total_ordered=Sum('quantity'))
+        .order_by('-total_ordered')[:5]
+    )
+
+    data = [
+        {
+            'food_item_id': item['food_item'],
+            'food_name': item['food_item__name'],
+            'total_ordered_quantity': item['total_ordered']
+        }
+        for item in food_stats
+    ]
 
     return Response(data, status=status.HTTP_200_OK)
