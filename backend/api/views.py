@@ -31,7 +31,9 @@ from .serializers import (
     CartSerializer,
     PlaceOrderSerializer,
     Restaurantlistserial,
-    CartReadSerializer
+    CartReadSerializer,
+    RestaurantDetailSerializer,
+    DeliverymanSerializer
 )
 from merchant.models import FoodItem, Restaurant, Order, Cart, OrderItem, DeliverymanStatus, Deliveryman, OrderItemHistory, OrderHistory
 
@@ -1068,6 +1070,58 @@ EXCLUDED_STATUSES = ['DELIVERED', 'CANCELLED']
 @permission_classes([IsAuthenticated])
 def order_details_api(request):
     user = request.user
+    view = request.query_params.get('view', None)
+
+    if view == "history":
+        queryset = (
+            OrderHistory.objects
+            .filter(user=user)
+            .select_related('restaurant', 'deliveryman')
+            .prefetch_related(
+                Prefetch('order_items_history',
+                         queryset=OrderItemHistory.objects.select_related('food_item'))
+            )
+            .order_by('-order_date')
+        )
+        data = []
+        for oh in queryset:
+            order_items_data = []
+            for item in oh.order_items_history.all():
+                fi = getattr(item, 'food_item', None)
+                image_url = None
+                if fi:
+                    if getattr(fi, 'profile_picture', None):
+                        image_url = fi.profile_picture.url if getattr(
+                            fi.profile_picture, 'url', None) else None
+                    elif getattr(fi, 'external_image_url', None):
+                        image_url = fi.external_image_url
+                order_items_data.append({
+                    "id": getattr(item, 'id', None),
+                    "name": getattr(fi, 'name', 'N/A') if fi else 'N/A',
+                    "quantity": getattr(item, 'quantity', 0),
+                    "price_at_order": str(getattr(item, 'price_at_order', Decimal('0.00'))),
+                    "image": image_url,
+                })
+
+            order_data = {
+                "order_id": getattr(oh, 'original_order', oh.id),
+                "status": getattr(oh, 'status', ''),
+                "total_price": str(getattr(oh, 'total_price', Decimal('0.00'))),
+                "delivery_charge": str(getattr(oh, 'delivery_charge', Decimal('0.00'))),
+                "payment_method": getattr(oh, 'payment_method', None),
+                "order_date": getattr(oh, 'order_date', None).isoformat() if getattr(oh, 'order_date', None) else None,
+                "delivery_location": getattr(oh, 'customer_location', None),
+                "restaurant": RestaurantDetailSerializer(getattr(oh, 'restaurant', None), context={'request': request}).data if getattr(oh, 'restaurant', None) else None,
+                "deliveryman": DeliverymanSerializer(getattr(oh, 'deliveryman', None), context={'request': request}).data if getattr(oh, 'deliveryman', None) else None,
+                "order_items": order_items_data,
+                "latitude": getattr(oh, 'latitude', None),
+                "longitude": getattr(oh, 'longitude', None),
+                "delivered_time": getattr(oh, 'created_at', None).isoformat() if getattr(oh, 'created_at', None) else None
+            }
+            data.append(order_data)
+
+        return Response({"orders": data}, status=status.HTTP_200_OK)
+
     queryset = (
         Order.objects
         .filter(user=user)
@@ -1076,7 +1130,12 @@ def order_details_api(request):
         .prefetch_related(Prefetch('order_items', queryset=OrderItem.objects.select_related('food_item')))
         .order_by('-order_date')
     )
-    serializer = OrderWithItemsSerializer(queryset, many=True)
+
+    if view and view.upper() in ["PENDING", "PROCESSING", "WAITING_FOR_DELIVERY", "OUT_FOR_DELIVERY"]:
+        queryset = queryset.filter(status=view.upper())
+
+    serializer = OrderWithItemsSerializer(
+        queryset, many=True, context={'request': request})
     return Response({"orders": serializer.data}, status=status.HTTP_200_OK)
 
 
