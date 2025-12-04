@@ -14,40 +14,40 @@
       <h4>Total Menus</h4>
       <div>
         <p>{{fooditem_count|default_if_none:"0" }}</p>
-        <span>
+        <!-- <span>
           <i class="fa-solid fa-up-long fa-increase"></i>
           <span class="percent-change fa-increase">12.5%</span>
-        </span>
+        </span> -->
       </div>
     </div>
     <div class="statistics">
       <h4>Total Revenue</h4>
       <div>
         <p>{{total_revenue}}</p>
-        <span>
+        <!-- <span>
           <i class="fa-solid fa-down-long fa-decrease"></i>
           <span class="percent-change fa-decrease">-4%</span>
-        </span>
+        </span> -->
       </div>
     </div>
     <div class="statistics">
       <h4>Total Orders</h4>
       <div>
        <p>{{ orders_count|default_if_none:"0" }}</p>
-        <span>
+        <!-- <span>
           <i class="fa-solid fa-down-long fa-decrease"></i>
           <span class="percent-change fa-decrease">-2.34%</span>
-        </span>
+        </span> -->
       </div>
     </div>
     <div class="statistics">
       <h4>Total Customers</h4>
       <div>
         <p>{{total_customers}}</p>
-        <span>
+        <!-- <span>
           <i class="fa-solid fa-down-long fa-increase"></i>
           <span class="percent-change fa-increase">32%</span>
-        </span>
+        </span> -->
       </div>
     </div>
   </div>
@@ -55,10 +55,12 @@
   <div id="statistics-summary">
     <div id="summary1">
       <h3>Orders Summary</h3>
+      <div>
+        <canvas id="ordersChart" width="400" height="200"></canvas>
+      </div>
     </div>
     <div id="summary2">
       <div id="summary2-div">
-        <h3>Order Statistics</h3>
       </div>
     </div>
   </div>
@@ -66,5 +68,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="application/json" id="orders-data">
+    {{ last_7_days_orders|safe }}
+</script>
 <script src="{% static 'scripts/restaurant_dashboard.js' %}" defer></script>
 {% endblock %}

@@ -1,15 +1,15 @@
 {% extends "merchant/merchant_templates_base.html" %}
 {% load static %}
-{% block styles %} <link rel="stylesheet" href="{%static 'css/restaurant_customers.css'%}" />{% endblock  %}
+{% block styles %} <link rel="stylesheet" href="{%static 'css/restaurant_history.css'%}" />{% endblock  %}
 {% block headcontent %}
 <div id="head-content">
-          <h2>Customers</h2>
-          <h4><span>"Your Customers"</span></h4>
+          <h2>History</h2>
+          <h4><span>"Your Order History"</span></h4>
         </div>
   {% endblock  %}
   {% block activate_customers %}active{% endblock  %}
 {% block mainspace %}  
-  <div id="container-body">
+  <!-- <div id="container-body">
 <div class="summary-card">
     <div class="main-info">
         <h3> 
@@ -52,8 +52,19 @@
     </div>
     
 </div>
+</div> -->
+
+<div id="container-body">
+</div>
+ <div id="emptyorder">
+    <div id="crossimg">
+        <img src="{% static 'images/cross.png' %}" alt="" />
+    </div>
+    <div>
+        <p>You don't have any delivery history!</p>
+    </div>
 </div>
     {% endblock %}
-     {% block scripts %}<script src="{%static 'scripts/restaurant_customers.js'%}" defer></script>{% endblock  %}
+     {% block scripts %}<script src="{%static 'scripts/restaurant_history.js'%}" defer></script>{% endblock  %}
 
 

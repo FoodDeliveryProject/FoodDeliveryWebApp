@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", (e) => {
 
     async function getOrderHistory(){
         try{
-            const response = await fetch("http://127.0.0.1:8000/json/deliveryman-order-history/");
+            const response = await fetch("http://127.0.0.1:8000/json/restaurant-order-list/");
             const data = await response.json();
             console.log("orderhistory:",data.data);
             orderHistory = data.data;
@@ -33,30 +33,33 @@ document.addEventListener("DOMContentLoaded", (e) => {
         orderHistory.forEach((order)=>{
             const summaryCard = document.createElement("div");
             summaryCard.classList.add("summary-card");
-            summaryCard.innerHTML = `
-            <div class="main-info">
-            <h3> 
-            <span><i class="fa-solid fa-tag"></i>
-            </span>
+           summaryCard.innerHTML = `
+    <div class="main-info">
+        <h3> 
+            <span><i class="fa-solid fa-tag"></i></span>
             <span>${order.original_order_id ?? order.order_id}</span>
-            </h3>
-            <i class="fa-solid fa-circle-arrow-right view-details"></i>
-            <i class="fa-solid fa-circle-arrow-down view-less hidden"></i>
-            </div>
-            <div class="openclose">
-            <div class="main-body">
+        </h3>
+        <i class="fa-solid fa-circle-arrow-right view-details"></i>
+        <i class="fa-solid fa-circle-arrow-down view-less hidden"></i>
+    </div>
+
+    <div class="openclose">
+        <div class="main-body">
+
             <div class="customer-info">
-            <h4>Customer info</h4>
-            <p><strong>Customer:</strong><span>${order.customer_info.customer}</span></p>
-            <p><strong>Address:</strong>${order.customer_info.address}</p>
-            <p><strong>Number:</strong>${order.customer_info.number}</p>
+                <h4>Customer info</h4>
+                <p><strong>Customer:</strong> <span>${order.customer_info.customer}</span></p>
+                <p><strong>Address:</strong> ${order.customer_info.address}</p>
+                <p><strong>Number:</strong> ${order.customer_info.number}</p>
             </div>
+
             <div class="merchant-info">
-            <h4>Merchant info</h4>
-            <p><strong>Restaurant Name:</strong> ${order.merchant_info.restaurant_name}</p>
-            <p><strong>Address:</strong>${order.merchant_info.address}</p>
-            <p><strong>Contact No:</strong>${order.merchant_info.contact_no}</p>
+                <h4>Merchant info</h4>
+                <p><strong>Restaurant Name:</strong> ${order.deliveryman_info.deliveryman_name}</p>
+                <p><strong>Address:</strong> ${order.deliveryman_info.phone_number}</p>
+                <p><strong>Contact No:</strong> ${order.deliveryman_info.vehicle}</p>
             </div>
+
             <div class="order-items">
                 <h4>Order Items</h4>
                 ${order.order_items.map(item => `
@@ -70,6 +73,7 @@ document.addEventListener("DOMContentLoaded", (e) => {
         </div>
     </div>
 `;
+
 
         const mainBody = summaryCard.querySelector('.main-body');
         const openClose = summaryCard.querySelector('.openclose');

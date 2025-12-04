@@ -860,7 +860,7 @@ def restaurant_customers(request):
         profile = Restaurant.objects.get(user=request.user)
     except Restaurant.DoesNotExist:
         return redirect('deliveryman-dashboard')
-    return render(request, "merchant/restaurant_customers.html", {
+    return render(request, "merchant/restaurant_history.html", {
         'restaurant': profile,
     })
 

@@ -14,7 +14,7 @@
   justify-content: center;
   flex-direction: column;
   font-family: "Poppins", sans-serif;
-  transition: transform 0.5s ease;
+  transition: transform 0.3s ease;
 }
 
 .summary-card:hover {
@@ -108,7 +108,7 @@
 .openclose {
   max-height: 0;
   opacity: 0;
-  transition: max-height 1s ease-in-out, opacity 3s ease;
+  transition: max-height 1s ease-in-out, opacity 1s ease;
 }
 
 .main-body {
@@ -123,13 +123,17 @@
   opacity: 1;
 }
 
-.customer-info {
+.customer-info,
+.merchant-info,
+.order-items {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.customer-info > h4 {
+.customer-info > h4,
+.merchant-info > h4,
+.order-items > h4 {
   font-family: "rocketThunder";
   letter-spacing: 1px;
   font-weight: 500;
@@ -138,4 +142,36 @@
 
 .hidden {
   display: none;
+}
+
+#emptyorder {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 50px;
+  display: none;
+}
+
+#emptyorder > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  z-index: 1;
+}
+
+#emptyorder > div:last-child p {
+  font-family: "rocketThunder";
+  font-size: 25px;
+}
+
+#crossimg {
+  height: 150px;
+  width: 150px;
+}
+
+#crossimg img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
 }

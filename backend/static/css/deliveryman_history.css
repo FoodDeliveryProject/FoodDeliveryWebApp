@@ -124,14 +124,16 @@
 }
 
 .customer-info,
-.merchant-info {
+.merchant-info,
+.order-items {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
 .customer-info > h4,
-.merchant-info > h4 {
+.merchant-info > h4,
+.order-items > h4 {
   font-family: "rocketThunder";
   letter-spacing: 1px;
   font-weight: 500;

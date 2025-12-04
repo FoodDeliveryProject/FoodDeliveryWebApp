@@ -26,11 +26,11 @@
   color: #000000;
 }
 
-.statistics h4 {
+.statistics > h4 {
   font-size: 22px;
   letter-spacing: 2px;
   font-weigth: 400;
-  color: inherit;
+  color: #646464ff;
   font-family: "rocketThunder", sans-serif;
 }
 
@@ -84,6 +84,18 @@
   letter-spacing: 2px;
 }
 
+#summary1 > div {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 170px; /* remaining height after title */
+}
+
+#summary1 canvas {
+  width: 100% !important;
+  height: 150px !important;
+}
+
 #summary2 {
   border: 10px solid white;
   border-radius: 20px;
@@ -105,12 +117,6 @@
   z-index: 20;
   transition: transform 0.2s ease;
   transform-style: preserve-3d;
-}
-
-#summary2 div h3 {
-  font-family: "epic";
-  font-size: 20px;
-  letter-spacing: 2px;
 }
 
 #popular {
@@ -219,6 +225,20 @@
 .popular-container div:last-child:hover {
   transform: scaleY(1.5) translateY(-5px);
   font-size: 1.1rem;
+}
+
+#summary2 > div > p {
+  font-family: "epic";
+  font-size: 16px;
+  margin: 4px 0;
+  color: #3b2a25;
+}
+
+#summary2-div > h3 {
+  color: #f15627ff;
+  font-size: 28px;
+  font-family: "rocketThunder";
+  letter-spacing: 1px;
 }
 
 /* @media (max-width: 1024px) {
