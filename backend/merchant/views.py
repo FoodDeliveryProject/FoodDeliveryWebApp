@@ -35,7 +35,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
-
+from django.db.models import Sum
 
 def profile_none_required(view_func):
     @wraps(view_func)
@@ -641,6 +641,18 @@ def email_sent_view(request):
 
 @login_required
 def restaurant_dashboard(request):
+    def format_number(num):
+        num = float(num)
+
+        if num >= 1_000_000_000:
+            return f"{num/1_000_000_000:.1f}B"
+        if num >= 1_000_000:
+            return f"{num/1_000_000:.1f}M"
+        if num >= 1_000:
+            return f"{num/1_000:.1f}k"
+
+        return str(int(num))
+
     obj, created = GoToDashClickCheck.objects.get_or_create(user=request.user)
     if not obj.go_to_dash_clicked:
         obj.go_to_dash_clicked = True
@@ -653,12 +665,22 @@ def restaurant_dashboard(request):
     fooditem_count = FoodItem.objects.filter(restaurant=profile).count()
     orders_count = Order.objects.filter(restaurant=profile).count()
 
+    total_customers = OrderHistory.objects.filter(restaurant=profile).values('user').distinct().count()
+
+
+    total_revenue = OrderHistory.objects.filter(
+        restaurant=profile
+    ).aggregate(
+        total=Sum('total_price')
+    )['total'] or 0
+    formatted_total_revenue = format_number(total_revenue)
     return render(request, "merchant/restaurant_dashboard.html", {
         'restaurant': profile,
         'fooditem_count': fooditem_count,
         'orders_count': orders_count,
+        'total_customers': total_customers,
+        'total_revenue':formatted_total_revenue,
     })
-
 
 @login_required
 def restaurant_orders(request):
@@ -1548,8 +1570,7 @@ def restaurant_order_list_json_response(request):
         )
 
     try:
-        orders = list(Order.objects.filter(restaurant=restaurant)) + \
-            list(OrderHistory.objects.filter(restaurant=restaurant))
+        orders = list(OrderHistory.objects.filter(restaurant=restaurant))
         orders = sorted(orders, key=lambda o: o.order_date, reverse=True)
     except Exception as e:
         print(f"Database query error: {e}")
@@ -1562,8 +1583,7 @@ def restaurant_order_list_json_response(request):
 
     for order in orders:
         customer_name = order.user.get_full_name() or order.user.username
-        customer_number = getattr(order.user.user_profile, 'phone_number',
-                                  'N/A') if hasattr(order.user, 'user_profile') else 'N/A'
+        customer_number = getattr(order.user.user_profile, 'phone_number', 'N/A') if hasattr(order.user, 'user_profile') else 'N/A'
 
         customer_info = {
             "customer": customer_name,
@@ -1576,11 +1596,9 @@ def restaurant_order_list_json_response(request):
             deliveryman = order.deliveryman
             phone_number = None
             if hasattr(deliveryman.user, 'user_profile'):
-                phone_number = getattr(
-                    deliveryman.user.user_profile, 'phone_number', None)
+                phone_number = getattr(deliveryman.user.user_profile, 'phone_number', None)
             if not phone_number and hasattr(deliveryman.user, 'merchant_profile'):
-                phone_number = getattr(
-                    deliveryman.user.merchant_profile, 'phone_number', None)
+                phone_number = getattr(deliveryman.user.merchant_profile, 'phone_number', None)
             if not phone_number:
                 phone_number = 'N/A'
 
@@ -1590,9 +1608,7 @@ def restaurant_order_list_json_response(request):
                 "vehicle": getattr(deliveryman, 'Vehicle', 'N/A')
             }
 
-        if hasattr(order, 'order_items'):
-            order_items = order.order_items.all()
-        elif hasattr(order, 'order_items_history'):
+        if hasattr(order, 'order_items_history'):
             order_items = order.order_items_history.all()
         else:
             order_items = []
