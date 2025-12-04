@@ -33,7 +33,7 @@ from .serializers import (
     Restaurantlistserial,
     CartReadSerializer
 )
-from merchant.models import FoodItem, Restaurant, Order, Cart, OrderItem, DeliverymanStatus, Deliveryman
+from merchant.models import FoodItem, Restaurant, Order, Cart, OrderItem, DeliverymanStatus, Deliveryman, OrderItemHistory, OrderHistory
 
 from django.db.models import Prefetch
 from .serializers import OrderWithItemsSerializer
@@ -924,21 +924,19 @@ def update_order_status_api(request):
     order.status = new_status
     order.save(update_fields=['status'])
 
-    channel_layer = get_channel_layer();
+    channel_layer = get_channel_layer()
     try:
         async_to_sync(channel_layer.group_send)(
-        f"order_{order_id}",
-        {
-            "type": "order_status_change",
-            "payload":{
-                "order_id": order_id,
-                "new_status": new_status
-            }
-        })
+            f"order_{order_id}",
+            {
+                "type": "order_status_change",
+                "payload": {
+                    "order_id": order_id,
+                    "new_status": new_status
+                }
+            })
     except:
         pass
-
-
 
     return Response(
         {"detail": f"Order #{order_id} status updated to '{new_status}'."},
@@ -1250,18 +1248,17 @@ def set_order_waiting_for_delivery_api(request):
             if not dm_phone and hasattr(dm_user, "merchant_profile"):
                 dm_phone = getattr(dm_user.merchant_profile,
                                    "phone_number", None)
-        status_obj = getattr(assigned_deliveryman,'status',None)
+        status_obj = getattr(assigned_deliveryman, 'status', None)
         deliveryman_data = {
             "id": getattr(assigned_deliveryman, "pk", None),
             "name": f"{getattr(assigned_deliveryman, 'Firstname', '') or ''} {getattr(assigned_deliveryman, 'Lastname', '') or ''}".strip(),
             "email": getattr(dm_user, "email", None) if dm_user else None,
             "phone": dm_phone,
             "vehicle": getattr(assigned_deliveryman, "Vehicle", None),
-            "active_flag": getattr(status_obj, 'online',False) if status_obj is not None else False
+            "active_flag": getattr(status_obj, 'online', False) if status_obj is not None else False
         }
 
     channel_layer = get_channel_layer()
-
 
     # CASE A = Restaurant already has a deliveryman assigned
     if assigned_deliveryman:
@@ -1292,8 +1289,8 @@ def set_order_waiting_for_delivery_api(request):
                 async_to_sync(channel_layer.group_send)(
                     f"order_{order_id}",
                     {
-                        "type":"order_status_change",
-                        "payload":{
+                        "type": "order_status_change",
+                        "payload": {
                             "order_id": order_id,
                             "new_status": "WAITING_FOR_DELIVERY",
                             "deliveryman": deliveryman_data
@@ -1315,15 +1312,15 @@ def set_order_waiting_for_delivery_api(request):
                 }
             )
             async_to_sync(channel_layer.group_send)(
-                    f"order_{order_id}",
-                    {
-                        "type":"order_status_change",
-                        "payload":{
+                f"order_{order_id}",
+                {
+                    "type": "order_status_change",
+                    "payload": {
                             "order_id": order_id,
                             "new_status": "WAITING_FOR_DELIVERY",
-                        }
                     }
-                )
+                }
+            )
         except:
             pass
 
@@ -1339,15 +1336,15 @@ def set_order_waiting_for_delivery_api(request):
             }
         )
         async_to_sync(channel_layer.group_send)(
-                    f"order_{order_id}",
-                    {
-                        "type":"order_status_change",
-                        "payload":{
+            f"order_{order_id}",
+            {
+                "type": "order_status_change",
+                        "payload": {
                             "order_id": order_id,
                             "new_status": "WAITING_FOR_DELIVERY",
                         }
-                    }
-                )
+            }
+        )
     except:
         pass
 
@@ -1460,7 +1457,7 @@ def deliveryman_accept_order_api(request):
         "active_flag": getattr(status_obj, 'online', False) if status_obj is not None else False
     }
 
-    order_ids  = [order.pk] + additionally_assigned_ids
+    order_ids = [order.pk] + additionally_assigned_ids
     order_ids .sort()
 
     channel_layer = get_channel_layer()
@@ -1469,7 +1466,7 @@ def deliveryman_accept_order_api(request):
             async_to_sync(channel_layer.group_send)(
                 f"order_{oid}",
                 {
-                    "type":"deliveryman_accepted",
+                    "type": "deliveryman_accepted",
                     "payload": {
                         "order_id": oid,
                         "deliveryman": deliveryman_data
@@ -1480,13 +1477,12 @@ def deliveryman_accept_order_api(request):
         async_to_sync(channel_layer.group_send)(
             f"deliveryman_{deliveryman.pk}",
             {
-                "type":"join_multiple_order_groups",
-                "order_ids":order_ids
+                "type": "join_multiple_order_groups",
+                "order_ids": order_ids
             }
         )
     except:
         pass
-
 
     return Response({
         "success": True,
@@ -1501,20 +1497,47 @@ def deliveryman_accept_order_api(request):
 @permission_classes([IsAuthenticated])
 def user_order_details_api(request, id):
     user = request.user
-    # Get the order by ID for the current authenticated user
-    order = get_object_or_404(
-        Order.objects.select_related('restaurant', 'deliveryman')
-                     .prefetch_related(
-                         Prefetch(
-                             'order_items', queryset=OrderItem.objects.select_related('food_item')
-                         )
-        ),
-        id=id, user=user
-    )
 
-    is_assigned = order.assigned
+    def _get_item_image(food_item):
+        if not food_item:
+            return None
+        if getattr(food_item, 'profile_picture', None):
+            try:
+                return food_item.profile_picture.url
+            except Exception:
+                pass
+        return getattr(food_item, 'external_image_url', None)
 
-    # Customer info
+    order = Order.objects.select_related('restaurant', 'deliveryman') \
+        .prefetch_related(
+            Prefetch('order_items',
+                     queryset=OrderItem.objects.select_related('food_item'))
+    ).filter(id=id, user=user).first()
+
+    source_is_history = False
+    order_items_qs = None
+    source_obj = None
+
+    if order:
+        source_obj = order
+        order_items_qs = order.order_items.all()
+    else:
+        oh = OrderHistory.objects.select_related('restaurant', 'deliveryman') \
+            .prefetch_related(
+                Prefetch('order_items_history',
+                         queryset=OrderItemHistory.objects.select_related('food_item'))
+        ).filter(original_order=str(id), user=user).first()
+        if oh:
+            source_is_history = True
+            source_obj = oh
+            order_items_qs = oh.order_items_history.all()
+        else:
+            return Response({"success": False, "detail": "No order found with that id for the authenticated user."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+    is_assigned = bool(getattr(source_obj, 'assigned', False)
+                       ) if not source_is_history else False
+
     customer_info = {
         "id": user.id,
         "username": user.username,
@@ -1523,26 +1546,24 @@ def user_order_details_api(request, id):
         "phone": getattr(user.user_profile, 'phone_number', None) if hasattr(user, 'user_profile') else None,
     }
 
-    # Restaurant info
-    restaurant_obj = getattr(order, 'restaurant', None)
+    restaurant_obj = getattr(source_obj, 'restaurant', None)
     restaurant_info = None
     if restaurant_obj:
         restaurant_info = {
-            "id": restaurant_obj.id,
+            "id": getattr(restaurant_obj, 'id', None),
             "name": getattr(restaurant_obj, 'restaurant_name', 'N/A'),
             "owner_name": getattr(restaurant_obj, 'owner_name', 'N/A'),
-            "owner_email": getattr(restaurant_obj, 'owner_email', 'N/A'),
-            "owner_contact": getattr(restaurant_obj, 'owner_contact', 'N/A'),
+            "owner_email": getattr(restaurant_obj, 'owner_email', None),
+            "owner_contact": getattr(restaurant_obj, 'owner_contact', None),
             "address": getattr(restaurant_obj, 'restaurant_address', 'N/A'),
             "cuisine": getattr(restaurant_obj, 'cuisine', 'N/A'),
             "restaurant_type": getattr(restaurant_obj, 'restaurant_type', 'N/A'),
             "profile_picture": getattr(restaurant_obj.profile_picture, 'url', None) if getattr(restaurant_obj, 'profile_picture', None) else None,
-            "latitude": getattr(restaurant_obj, 'latitude', 0.0),
-            "longitude": getattr(restaurant_obj, 'longitude', 0.0),
+            "latitude": getattr(restaurant_obj, 'latitude', None),
+            "longitude": getattr(restaurant_obj, 'longitude', None),
         }
 
-    # Deliveryman info
-    deliveryman_obj = getattr(order, 'deliveryman', None)
+    deliveryman_obj = getattr(source_obj, 'deliveryman', None)
     deliveryman_info = None
     if deliveryman_obj:
         deliveryman_user = getattr(deliveryman_obj, 'user', None)
@@ -1554,67 +1575,74 @@ def user_order_details_api(request, id):
             if not phone_number and hasattr(deliveryman_user, 'merchant_profile'):
                 phone_number = getattr(
                     deliveryman_user.merchant_profile, 'phone_number', None)
+
         status_obj = getattr(deliveryman_obj, 'status', None)
-        active_flag = getattr(status_obj, 'online',
-                              False) if status_obj is not None else False
+        active_flag = bool(getattr(status_obj, 'online', False)
+                           ) if status_obj is not None else False
 
         deliveryman_info = {
-            "id": deliveryman_obj.id,
+            "id": getattr(deliveryman_obj, 'id', None),
             "name": f"{getattr(deliveryman_obj, 'Firstname', '')} {getattr(deliveryman_obj, 'Lastname', '')}".strip(),
             "email": getattr(deliveryman_user, 'email', None) if deliveryman_user else None,
-            "phone": phone_number or 'N/A',
-            "vehicle": getattr(deliveryman_obj, 'Vehicle', 'N/A'),
+            "phone": phone_number or None,
+            "vehicle": getattr(deliveryman_obj, 'Vehicle', None),
             "active_flag": active_flag,
         }
 
-    # Order items with images
     order_items_data = []
-    for item in order.order_items.all():
+    for item in (order_items_qs or []):
         fi = getattr(item, 'food_item', None)
-        if fi:
-            image_url = getattr(fi.profile_picture, 'url', None) if getattr(
-                fi, 'profile_picture', None) else fi.external_image_url
-        else:
-            image_url = None
-
         order_items_data.append({
-            "id": item.id,
+            "id": getattr(item, 'id', None),
             "name": getattr(fi, 'name', 'N/A') if fi else 'N/A',
-            "quantity": item.quantity,
-            "price_at_order": str(item.price_at_order),
-            "image": image_url
+            "quantity": getattr(item, 'quantity', 0),
+            "price_at_order": str(getattr(item, 'price_at_order', Decimal('0.00'))),
+            "image": _get_item_image(fi),
         })
 
-    # Final order data
+    if source_is_history:
+        order_id_value = getattr(source_obj, 'original_order', None) or getattr(
+            source_obj, 'id', None)
+    else:
+        order_id_value = getattr(source_obj, 'id', None)
+
+    status_value = getattr(source_obj, 'status', '') or ''
+    total_price_val = getattr(source_obj, 'total_price', Decimal('0.00'))
+    order_date_val = getattr(source_obj, 'order_date', None)
+    delivery_charge_val = getattr(
+        source_obj, 'delivery_charge', Decimal('0.00'))
+    payment_method_val = getattr(source_obj, 'payment_method', None)
+    delivery_location_val = getattr(source_obj, 'customer_location', None)
+    latitude_val = getattr(source_obj, 'latitude', None)
+    longitude_val = getattr(source_obj, 'longitude', None)
+
+    ordered_steps = ["PENDING", "PROCESSING",
+                     "WAITING_FOR_DELIVERY", "OUT_FOR_DELIVERY"]
+    status_progress = {step: False for step in ordered_steps}
+    status_value_up = status_value.upper()
+    if status_value_up in ordered_steps:
+        current_index = ordered_steps.index(status_value_up)
+        for i in range(0, current_index):
+            status_progress[ordered_steps[i]] = True
+
     order_data = {
-        "order_id": order.id,
-        "status": getattr(order, 'status', 'N/A'),
-        "total_price": str(getattr(order, 'total_price', Decimal('0.00'))),
-        "delivery_charge": str(getattr(order, 'delivery_charge', Decimal('0.00'))),
-        "payment_method": getattr(order, 'payment_method', None),
-        "delivery_location": getattr(order, 'customer_location', None),
-        "order_date": getattr(order, 'order_date', None).isoformat() if getattr(order, 'order_date', None) else None,
+        "order_id": order_id_value,
+        "status": status_value,
+        "total_price": str(total_price_val if total_price_val is not None else Decimal('0.00')),
+        "delivery_charge": str(delivery_charge_val if delivery_charge_val is not None else Decimal('0.00')),
+        "payment_method": payment_method_val,
+        "delivery_location": delivery_location_val,
+        "order_date": order_date_val.isoformat() if order_date_val else None,
         "customer": customer_info,
         "restaurant": restaurant_info,
         "deliveryman": deliveryman_info,
         "order_items": order_items_data,
-        "latitude": getattr(order, 'latitude', Decimal('0.00')),
-        "longitude": getattr(order, 'longitude', Decimal('0.00'))
+        "latitude": latitude_val,
+        "longitude": longitude_val,
     }
-    status_value = getattr(order, 'status', '').upper()
 
-    ordered_steps = [
-        "PENDING",
-        "PROCESSING",
-        "WAITING_FOR_DELIVERY",
-        "OUT_FOR_DELIVERY"
-    ]
-
-    status_progress = {step: False for step in ordered_steps}
-
-    if status_value in ordered_steps:
-        current_index = ordered_steps.index(status_value)
-        for i in range(0, current_index):
-            status_progress[ordered_steps[i]] = True
-
-    return Response({"success": True, "assigned": is_assigned, "status_progress": status_progress, "order": order_data}, status=status.HTTP_200_OK)
+    return Response(
+        {"success": True, "assigned": is_assigned,
+            "status_progress": status_progress, "order": order_data},
+        status=status.HTTP_200_OK
+    )
