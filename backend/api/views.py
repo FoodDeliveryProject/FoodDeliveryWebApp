@@ -1711,3 +1711,32 @@ def user_order_details_api(request, id):
             "status_progress": status_progress, "order": order_data},
         status=status.HTTP_200_OK
     )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def most_discounted_food(request):
+    foods = FoodItem.objects.order_by('-discount')[:3]
+
+    data = []
+    for food in foods:
+        price = food.price or 0
+        discount_percent = food.discount or 0
+        discounted_price = price - (price * discount_percent / 100)
+
+        item = {
+            "id": food.id,
+            "name": food.name,
+            "price": str(price),
+            "discount": str(discount_percent),
+            "discounted_price": str(round(discounted_price, 2)),
+            "description": food.description,
+            "restaurant": food.restaurant.id if food.restaurant else None,
+            "veg_nonveg": food.veg_nonveg,
+            "profile_picture": food.profile_picture.url if food.profile_picture else food.external_image_url,
+            "availability_status": food.availability_status,
+            "review_rating": food.review_rating,
+        }
+        data.append(item)
+
+    return Response(data, status=status.HTTP_200_OK)
