@@ -141,12 +141,24 @@ def deliveryman_dashboard(request):
         'total_completed': total_completed_deliveries,
     })
 
-
 @login_required
 def merchant_logout_view(request):
+    user = request.user
+    deliveryman = getattr(user, "deliveryman", None)
+
+    if deliveryman:
+        try:
+            status = deliveryman.status
+            status.online = False
+            status.on_delivery = False  
+            status.save()
+        except DeliverymanStatus.DoesNotExist:
+            pass  
+
     logout(request)
-    messages.success(request, ("You are successfully logged out"))
+    messages.success(request, "You are successfully logged out")
     return redirect('home')
+
 
 
 @login_required
