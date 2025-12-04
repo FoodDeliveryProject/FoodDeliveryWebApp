@@ -650,7 +650,6 @@ def merchant_reset_password_view(request, uidb64, token):
 def email_sent_view(request):
     return render(request, "merchant/email_sent.html")
 
-
 @login_required
 def restaurant_dashboard(request):
     def format_number(num):
@@ -679,19 +678,44 @@ def restaurant_dashboard(request):
 
     total_customers = OrderHistory.objects.filter(restaurant=profile).values('user').distinct().count()
 
-
     total_revenue = OrderHistory.objects.filter(
         restaurant=profile
     ).aggregate(
         total=Sum('total_price')
     )['total'] or 0
     formatted_total_revenue = format_number(total_revenue)
+    from django.utils import timezone
+    from datetime import timedelta
+    today = timezone.now().date()
+    seven_day_start = today - timedelta(days=6)
+
+    base_qs = OrderHistory.objects.filter(restaurant=profile)
+
+    recent_window_qs = base_qs.filter(order_date__date__gte=seven_day_start, order_date__date__lte=today)
+
+    if recent_window_qs.exists():
+        window_end = today
+    else:
+        latest = base_qs.order_by('-order_date').first()
+        if latest:
+            window_end = latest.order_date.date()
+        else:
+            window_end = None
+
+    last_7_days_orders = []
+    if window_end:
+        for d in range(0, 7):
+            day = window_end - timedelta(days=d)
+            count = base_qs.filter(order_date__date=day).count()
+            last_7_days_orders.append(count)
+    print(last_7_days_orders)
     return render(request, "merchant/restaurant_dashboard.html", {
         'restaurant': profile,
         'fooditem_count': fooditem_count,
         'orders_count': orders_count,
         'total_customers': total_customers,
-        'total_revenue':formatted_total_revenue,
+        'total_revenue': formatted_total_revenue,
+        'last_7_days_orders': last_7_days_orders,
     })
 
 @login_required
