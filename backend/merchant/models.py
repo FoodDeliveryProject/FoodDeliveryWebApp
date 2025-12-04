@@ -356,6 +356,7 @@ class OrderHistory(models.Model):
         max_length=50, null=True, blank=True,
         help_text='ID of the original order from the Order table before deletion.'
     )
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     class Meta:
         ordering = ['-order_date']

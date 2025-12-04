@@ -1625,6 +1625,9 @@ def user_order_details_api(request, id):
         for i in range(0, current_index):
             status_progress[ordered_steps[i]] = True
 
+    if status_value_up == "DELIVERED":
+        for step in status_progress:
+            status_progress[step] = True
     order_data = {
         "order_id": order_id_value,
         "status": status_value,
@@ -1640,6 +1643,9 @@ def user_order_details_api(request, id):
         "latitude": latitude_val,
         "longitude": longitude_val,
     }
+    if source_is_history:
+        order_data["delivered_time"] = source_obj.created_at.isoformat(
+        ) if getattr(source_obj, 'created_at', None) else None
 
     return Response(
         {"success": True, "assigned": is_assigned,
