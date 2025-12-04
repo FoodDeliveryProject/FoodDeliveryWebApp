@@ -43,5 +43,9 @@ urlpatterns = [
          views.user_order_details_api, name='user-order-details'),
     path('most-discounted-food/', views.most_discounted_food,
          name="most-discounted-food"),
-    path('most-ordered-food/', views.most_ordered_food, name="most-ordered-food")
+    path('most-ordered-food/', views.most_ordered_food, name="most-ordered-food"),
+     path('all-restaurants/',views.all_restaurants_api,name = "all-restaurants-api"),
+     path('restaurant-food-item-detail/',views.restaurant_food_item_detail_api,name = "restaurant-food-item-detail-api"),
+
+    
 ]

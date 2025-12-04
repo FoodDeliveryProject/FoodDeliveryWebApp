@@ -31,6 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
 
+POSTGRE_PASSWORD = os.getenv("POSTGRE_PASSWORD") 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -137,6 +138,21 @@ DATABASES = {
 #         'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
 #     }
 # }
+
+
+######    This is the third postgre local database
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'FoodDeliveryWebAppPostgre',
+#         'USER': 'postgres',        
+#         'PASSWORD': POSTGRE_PASSWORD,
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
+
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
