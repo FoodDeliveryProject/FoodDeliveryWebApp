@@ -11,8 +11,6 @@ from django.utils import timezone
 
 
 # sandesh
-
-
 class ClientConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         order_id = self.scope['url_route']['kwargs']['order_id']
@@ -38,7 +36,6 @@ class ClientConsumer(AsyncWebsocketConsumer):
         print(
             f"Client disconnected from order {self.room_group_name} with code {code}")
 
-    # sandesh
     async def deliveryman_location(self, event):
         await self.send(text_data=json.dumps({
             "type": "deliveryman_location",
@@ -47,9 +44,25 @@ class ClientConsumer(AsyncWebsocketConsumer):
             "lng": event["lng"],
             "accuracy": event["accuracy"],
         }))
+    
+    async def order_status_change(self,event):
+        payload = event.get("payload")
+        await self.send(text_data=json.dumps({
+            "type": "order_status_change",
+            "data": {
+                "payload":payload
+            }
+        }))
+
+    async def deliveryman_accepted(self,event):
+        await self.send(text_data=json.dumps({
+            "type": "deliveryman_accepted",
+            "data": event.get("payload")
+        }))
 
 
 class ChatConsumer(WebsocketConsumer):
+    #sandesh
     def connect(self):
         from .models import Order
         restaurant_id = self.scope['url_route']['kwargs']['restaurant_id']
@@ -72,6 +85,7 @@ class ChatConsumer(WebsocketConsumer):
         self.send(text_data=json.dumps(
             {"type": "status", "status": "connected"}))
 
+    #sandesh
     def receive(self, text_data):
         try:
             payload = json.loads(text_data)
@@ -147,13 +161,30 @@ class ChatConsumer(WebsocketConsumer):
 
     # sandesh
     def deliveryman_location(self, event):
-        print("merchantconhere")
+        print("merconhere")
         self.send(text_data=json.dumps({
             "type": "deliveryman_location",
             "order_id": event["order_id"],
             "lat": event["lat"],
             "lng": event["lng"],
             "accuracy": event["accuracy"],
+        }))
+
+    #sandesh
+    def order_status_change(self,event):
+        payload = event.get("payload")
+        self.send(text_data=json.dumps({
+            "type": "order_status_change",
+            "data": {
+                "payload": payload
+            }
+        }))
+
+    #sandesh
+    def deliveryman_accepted(self,event):
+        self.send(text_data=json.dumps({
+            "type": "deliveryman_accepted",
+            "data": event.get("payload")
         }))
 
     def _get_models(self):
@@ -407,6 +438,7 @@ class ChatConsumer(WebsocketConsumer):
 
 
 class DeliverymanConsumer(WebsocketConsumer):
+    #sandesh
     def connect(self):
         from .models import Order
         deliveryman_id = self.scope['url_route']['kwargs']['deliveryman_id']
@@ -441,12 +473,9 @@ class DeliverymanConsumer(WebsocketConsumer):
             self.group_name, self.channel_name)
         async_to_sync(self.channel_layer.group_add)(
             "deliverymen", self.channel_name)
-        # milyo ki nai check garne
         active_orders = Order.objects.filter(
             deliveryman_id=deliveryman_id
         ).values_list('pk', flat=True)
-        print(
-            f"Found {active_orders.count()} active orders for deliveryman {deliveryman_id}")
         for order in active_orders:
             print(f"connecting del to group order_{order}")
             async_to_sync(self.channel_layer.group_add)(
@@ -476,6 +505,7 @@ class DeliverymanConsumer(WebsocketConsumer):
         except Exception:
             pass
 
+    #sandesh
     def receive(self, text_data=None, bytes_data=None):
         try:
             data = json.loads(text_data) if text_data else {}
@@ -527,11 +557,62 @@ class DeliverymanConsumer(WebsocketConsumer):
                 return str(obj)
             return obj
         safe_payload = make_json_safe(event.get("payload", {}))
-        print("i was here")
         self.send(text_data=json.dumps({
             "type": "new_order_available",
             "data": safe_payload
         }))
+
+     #sandesh
+   
+   # sandesh
+    def order_status_change(self,event):
+        payload = event.get("payload")
+        status = payload["new_status"]
+        if(status == "WAITING_FOR_DELIVERY" | status == "OUT_FOR_DELIVERY" | status == "DELIVERED"):
+            if(self.role == 'deliveryman'):
+                return;
+        self.send(text_data=json.dumps({
+            "type": "order_status_change",
+            "data": {
+                "payload": payload
+            }
+        }))
+
+    # sandesh
+    def join_multiple_order_groups(self,event):
+        order_ids = event.get("order_ids")
+        for order_id in order_ids:    
+            async_to_sync(self.channel_layer.group_add)(
+                f"order_{order_id}",
+                self.channel_name
+            )
+
+        # sandesh
+    
+    # sandesh
+    def handle_deliveryman_location(self, data):
+        actual_data = data.get("data")
+        order_ids = actual_data.get("order_ids")
+        lat = actual_data.get("lat")
+        lng = actual_data.get("lng")
+        accuracy = actual_data.get("accuracy")
+
+        if not isinstance(order_ids, list):
+            return
+        print("orderids received from del:",order_ids)
+        print("delconhere")
+        for order_id in order_ids:
+            print(order_id)
+            async_to_sync(self.channel_layer.group_send)(
+                f"order_{order_id}",
+                {
+                    "type": "deliveryman.location",
+                    "order_id": order_id,
+                    "lat": lat,
+                    "lng": lng,
+                    "accuracy": accuracy
+                }
+            )
 
     def _get_models(self):
         Order = apps.get_model("merchant", "Order")
@@ -856,32 +937,6 @@ class DeliverymanConsumer(WebsocketConsumer):
 
         except Exception:
             pass
-
-    # sandesh
-    def handle_deliveryman_location(self, data):
-        actual_data = data.get("data")
-        order_ids = actual_data.get("order_ids")
-        lat = actual_data.get("lat")
-        lng = actual_data.get("lng")
-        accuracy = actual_data.get("accuracy")
-
-        if not isinstance(order_ids, list):
-            return
-        print("orderids received from del:",order_ids)
-        print("delconhere")
-        for order_id in order_ids:
-            print(order_id)
-            async_to_sync(self.channel_layer.group_send)(
-                f"order_{order_id}",
-                {
-                    "type": "deliveryman.location",
-                    "order_id": order_id,
-                    "lat": lat,
-                    "lng": lng,
-                    "accuracy": accuracy
-                }
-            )
-
 
     def deliveryman_location(self, event):
         if(self.role == "deliveryman"):

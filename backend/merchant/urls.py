@@ -74,5 +74,7 @@ urlpatterns = [
     path("json/deliveryman-order-history/", views.deliveryman_order_history_json_response,
          name="deliveryman-order-history-json"),
     path("json/restaurant-order-list/", views.restaurant_order_list_json_response,
-         name="restaurant-order-list-json")
+         name="restaurant-order-list-json"),
+    path("json/deliveryman-status-and-orders/", views.deliveryman_status_and_orders,
+         name="deliveryman_status_and_orders")
 ]

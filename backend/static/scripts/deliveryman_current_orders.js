@@ -23,22 +23,22 @@ document.addEventListener("DOMContentLoaded",()=>{
   const mapErrContainer = document.querySelector("#map-error");
 
 
-  function startSendingLocation() {
-            const currentOrderIds = currentDeliveries.map(d => d.order_id);
-            console.log("ids:",currentOrderIds)
-            sendWSMessage("deliveryman_location", {
-                order_ids: currentOrderIds,
-                lat: delman_lat,
-                lng: delman_lng,
-                accuracy: delman_acc
-            });
+  // function startSendingLocation() {
+  //           const currentOrderIds = currentDeliveries.map(d => d.order_id);
+  //           console.log("ids:",currentOrderIds)
+  //           sendWSMessage("deliveryman_location", {
+  //               order_ids: currentOrderIds,
+  //               lat: delman_lat,
+  //               lng: delman_lng,
+  //               accuracy: delman_acc
+  //           });
 
-           console.log("WS Location Sent:", {
-                currentOrderIds,
-                delman_lat,
-                delman_lng
-            });
-  }
+  //          console.log("WS Location Sent:", {
+  //               currentOrderIds,
+  //               delman_lat,
+  //               delman_lng
+  //           });
+  // }
 
   function updateDeliveryManLocation(){
     if(!map) return;
@@ -61,9 +61,10 @@ document.addEventListener("DOMContentLoaded",()=>{
             delman_acc = accuracy;
             console.log("lat,lng:",delman_lat,delman_lng);
             updateDeliveryManLocation();
-            if(deliveryman_status === "OUT_FOR_DELIVERY"){
-              startSendingLocation();
-            }
+            // moved logic to base.js
+            // if(deliveryman_status === "OUT_FOR_DELIVERY"){
+            //   startSendingLocation();
+            // }
         });
     }, 5000); 
 }
@@ -91,6 +92,10 @@ document.addEventListener("DOMContentLoaded",()=>{
       if(orders && orders.length>0){
         orders.forEach((item)=> currentDeliveries.push(item));
       }
+      const currentOrderIdsLS = orders.map(o => o.order_id);
+      window.updateCurrentOrderIds(currentOrderIdsLS);
+      window.updateDeliverymanStatus(status.on_delivery ? "OUT_FOR_DELIVERY" : "IDLE");
+
     } catch (err) {
       console.error("error: ", err);
       showError({ message: `${err?.message}` });
@@ -121,7 +126,7 @@ initDeliveries();
   }
 
 
-  function renderDeliveries(){
+function renderDeliveries(){
     deliveryItemContainer.innerHTML = ""; 
     if(!currentDeliveries.length && map){
       map.remove();
@@ -146,7 +151,8 @@ initDeliveries();
       outForDeliveryBtn.disabled = true;
       outForDeliveryBtn.style.opacity = "0.5";
       outForDeliveryBtn.style.cursor = "not-allowed";
-      startSendingLocation();
+      // moved logic to base.js
+      // startSendingLocation();
     } else{
       outForDeliveryBtn.disabled = false;
       outForDeliveryBtn.style.opacity = "1";
@@ -417,8 +423,14 @@ currentDeliveries.forEach((delivery, index) => {
           deliveryman_status = "IDLE";
           isassigned = false;
           clearInterval(locationInterval);
+          window.updateDeliverymanStatus("IDLE");
+          window.updateCurrentOrderIds([]);
+
           console.log("All orders delivered. Stopped sending live location....");
           showError({message: `successfully delivered all the orders`},"success");
+        } else{
+          const oids = currentDeliveries.map(ods => ods.order_id);
+          window.updateCurrentOrderIds(oids);
         }
         renderDeliveries();
       }
@@ -445,12 +457,34 @@ currentDeliveries.forEach((delivery, index) => {
       
     async function outForDeliveryRequest() {
     try {
+      let payload;
       const order_ids = currentDeliveries.map((del)=> del.order_id);
       if(!order_ids || order_ids.length === 0){
         showError({message:`You don't currently have any delivery!`},"error");
         return;
       }
       console.log("order_ids:",order_ids);
+      if(delman_lat && delman_lng){
+        const deliveryman_location  = {
+          lat: delman_lat,
+          lng: delman_lng,
+          accuracy: delman_acc
+        }
+        payload = {
+          order_ids,
+          deliveryman_location
+        }
+      }else{
+        const deliveryman_location  = {
+          lat: "",
+          lng: "",
+          accuracy: ""
+        }
+        payload = {
+          order_ids,
+          deliveryman_location
+        }
+      }
       const response = await fetch(
         `http://127.0.0.1:8000/api/update-order-out-for-delivery-status/`,
         // `http://192.168.18.53:8000/api/update-order-out-for-delivery-status/`,
@@ -461,7 +495,7 @@ currentDeliveries.forEach((delivery, index) => {
              "X-CSRFToken": csrftoken
           },
           credentials:"include",
-          body: JSON.stringify({order_ids:order_ids})
+          body: JSON.stringify(payload)
         }
       );
       if(response.ok){
@@ -471,6 +505,10 @@ currentDeliveries.forEach((delivery, index) => {
         });
         deliveryman_status = "OUT_FOR_DELIVERY";
         renderDeliveries();
+        deliveryman_status = "OUT_FOR_DELIVERY";
+        window.updateDeliverymanStatus("OUT_FOR_DELIVERY");
+        window.updateCurrentOrderIds(order_ids);
+        // moves this below logic to base.js
         // startSendingLocation(); 
       }
 

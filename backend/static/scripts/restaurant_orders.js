@@ -140,10 +140,6 @@ async function getCurrentOrders() {
 
     if (window.registerWSHandler) {
       window.registerWSHandler("orderPageHandler", (msg) => {
-          if (msg.type === "status") {
-              console.log("Server status:", msg.status);
-              return;
-          }
 
           if (msg.type === "chat") {
             try{
@@ -174,13 +170,14 @@ async function getCurrentOrders() {
         if(!order_id || !lat || !lng || !accuracy){
           return;
         }
+        console.log("WSMSG:",msg);
         const order_data = orders.find(od => parseInt(od.order_id) === parseInt(order_id))
         if (!order_data) return;
 
         order_data.deliverymanLocation = { lat, lng, accuracy };
         updateDeliverymanMarker(order_id);
-    }
-});
+      }
+    });
 
   } else {
       console.error("WebSocket not initialized yet");

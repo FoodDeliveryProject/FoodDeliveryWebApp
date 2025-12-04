@@ -1,17 +1,5 @@
 from django.urls import re_path
-from django.utils.module_loading import import_string
 from merchant.consumers import ChatConsumer, DeliverymanConsumer, ClientConsumer
-
-
-# def get_chat_consumer():
-#     return import_string("merchant.consumers.ChatConsumer")
-
-
-# def get_deliveryman_consumer():
-#     return import_string("merchant.consumers.DeliverymanConsumer")
-
-# def get_client_consumer():
-#     return import_string("merchant.consumers.ClientConsumer")
 
 
 websocket_urlpatterns = [

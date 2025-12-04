@@ -32,6 +32,11 @@ function connectWS(){
 function onMessage(evt) {
   try {
     const msg = JSON.parse(evt.data);
+
+    if (msg.type === "status") {
+        console.log("Server status:", msg.status);
+    }
+
      if (msg.type === "chat") {
         orderCount++;
         countElement.innerHTML = orderCount;
@@ -40,6 +45,14 @@ function onMessage(evt) {
         setTimeout(() => { document.title = "Orders"; }, 2000);
     }
 
+    if(msg.type === "order_status_change"){
+        const payload = msg.payload;
+        showError({message:`Order ${payload.order_id} status updated to ${payload.new_status}!`})
+    }
+
+    if(msg.type === "deliveryman_accepted"){
+        showError({message:`deliveryman "${msg.data.deliveryman.full_name}" has accepted order ${msg.data.order_id}`},"green");
+      }
     Object.values(wsHandlers).forEach(handler => {
         try { handler(msg); } catch(e) { console.error("Handler error", e); }
     });

@@ -1244,6 +1244,8 @@ def current_delivery_websocket_view(request):
 @permission_classes([IsAuthenticated])
 def bulk_update_order_status_api(request):
     order_ids = request.data.get('order_ids')
+    deliveryman_location = request.data.get('deliveryman_location')
+
 
     if not order_ids or not isinstance(order_ids, (list, tuple)):
         return Response(
@@ -1262,7 +1264,6 @@ def bulk_update_order_status_api(request):
     new_status = "OUT_FOR_DELIVERY"
     updated = []
     not_found = []
-    errors = []
 
     for oid in order_ids:
         try:
@@ -1284,21 +1285,35 @@ def bulk_update_order_status_api(request):
 
             updated.append(oid)
         except Exception as exc:
-            errors.append({oid: str(exc)})
+            return Response(
+                {"detail": f"Error updating order {oid}: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    channel_layer = get_channel_layer()
+    try:
+        for order_id in order_ids:
+            async_to_sync(channel_layer.group_send)(
+            f"order_{order_id}",
+            {
+                "type": "order_status_change",
+                "payload": {
+                    "order_id": order_id,
+                    "new_status": new_status,
+                    "deliveryman_location": deliveryman_location
+                }
+            }
+            )
+    except Exception:
+        pass
 
     response_data = {
         "updated_order_ids": updated,
         "not_found_order_ids": not_found,
-        "errors": errors,
-        "detail": f"Processed {len(order_ids)} order(s): {len(updated)} updated, {len(not_found)} not found, {len(errors)} errors."
+        "detail": f"Processed {len(order_ids)} order(s): {len(updated)} updated, {len(not_found)} not found."
     }
 
-    if updated:
-        return Response(response_data, status=status.HTTP_200_OK)
-    if not_found and not updated:
-        return Response(response_data, status=status.HTTP_404_NOT_FOUND)
-    return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
-
+    return Response(response_data, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1366,11 +1381,60 @@ def archive_and_delete_order_api(request):
              "error": str(exc)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+    
+    channel_layer = get_channel_layer()
+
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f"order_{order_id}",
+            {
+                "type": "order_status_change",
+                "payload":{
+                    "order_id": order_id,
+                    "new_status": "DELIVERED"
+                }
+            }
+        )
+    except Exception:
+        pass
 
     return Response(
         {"detail": f"Order {order_id} archived to OrderHistory #{oh.pk} and deleted from Orders."},
         status=status.HTTP_200_OK
     )
+
+
+@login_required
+def deliveryman_status_and_orders(request):
+    user = request.user
+    try:
+        deliveryman = Deliveryman.objects.get(user=user)
+    except Deliveryman.DoesNotExist:
+        return JsonResponse(
+            {
+                "success": False,
+                "detail": "Access denied. User is not registered as a Deliveryman."
+            },
+            status=403
+        )
+    status_obj = getattr(deliveryman, "status", None)
+    if not status_obj or not status_obj.on_delivery:
+        return JsonResponse({"success": True, "status": "IDLE"})
+    active_statuses = ['OUT_FOR_DELIVERY',
+                       'WAITING_FOR_DELIVERY', 'PROCESSING']
+    orders_qs = Order.objects.filter(
+        deliveryman=deliveryman,
+        assigned=True,
+        status__in=active_statuses
+    )
+
+    order_ids = list(orders_qs.values_list('id', flat=True))
+
+    return JsonResponse({
+        "success": True,
+        "status": "OUT_FOR_DELIVERY",
+        "order_ids": order_ids
+    })
 
 
 @login_required

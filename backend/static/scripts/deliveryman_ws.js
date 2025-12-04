@@ -4,6 +4,13 @@ let newDeliveryCount = 0;
 const countElement = document.querySelector(".new-order-count");
 const deliveryman_id = document.querySelector(".delid").getAttribute("id");
 countElement.innerHTML = newDeliveryCount;
+
+let deliverymanStatus = "IDLE";
+let currentOrderIds = [];
+let locationInterval = null;
+let lastLocation = { lat: null, lng: null, accuracy: null };
+
+
 const wsProtocol = location.protocol === 'https' ? 'wss':'ws';
 const wsUrl = `${wsProtocol}://${window.location.host}/ws/deliveryman/${deliveryman_id}/`;
 
@@ -71,5 +78,69 @@ function registerWSHandler(name, callback) {
 }
 
 window.registerWSHandler = registerWSHandler;
-
 window.addEventListener('DOMContentLoaded', connectWS);
+
+async function fetchInitialDeliverymanState() {
+    try {
+        const res = await fetch("/json/deliveryman-status-and-orders/", {
+            credentials: "include"
+        });
+
+        const data = await res.json();
+
+        currentOrderIds = [];
+
+        deliverymanStatus = data.status;
+        currentOrderIds = [...data.order_ids];
+
+        console.log("Initial DM state:", {
+            deliverymanStatus,
+            currentOrderIds
+        });
+
+    } catch (err) {
+        console.error("Could not fetch initial deliveryman state", err);
+    }
+}
+
+
+function startGlobalLocationInterval() {
+    if (locationInterval) clearInterval(locationInterval);
+
+    locationInterval = setInterval(() => {
+        if (deliverymanStatus !== "OUT_FOR_DELIVERY") return;
+
+        navigator.geolocation.getCurrentPosition((pos) => {
+            lastLocation.lat = pos.coords.latitude;
+            lastLocation.lng = pos.coords.longitude;
+            lastLocation.accuracy = pos.coords.accuracy;
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                sendWSMessage("deliveryman_location", {
+                    order_ids: currentOrderIds,
+                    lat: lastLocation.lat,
+                    lng: lastLocation.lng,
+                    accuracy: lastLocation.accuracy
+                });
+            }
+        });
+    }, 5000);
+}
+
+async function initialize(){
+    await fetchInitialDeliverymanState();
+    startGlobalLocationInterval();
+}
+
+initialize();
+
+window.updateDeliverymanStatus = (status) => {
+    deliverymanStatus = status;  
+};
+
+window.updateCurrentOrderIds = (ids) => {
+    console.log("Updated order IDs:", ids);
+    currentOrderIds = ids;
+};
+
+

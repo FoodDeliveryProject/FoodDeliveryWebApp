@@ -900,8 +900,6 @@ def update_order_status_api(request):
 
     order_id = request.data.get('order_id')
     new_status = request.data.get('status')
-    print("ordid:", order_id)
-    print("stat:", new_status)
 
     if not order_id or not new_status:
         return Response(
@@ -925,6 +923,22 @@ def update_order_status_api(request):
 
     order.status = new_status
     order.save(update_fields=['status'])
+
+    channel_layer = get_channel_layer();
+    try:
+        async_to_sync(channel_layer.group_send)(
+        f"order_{order_id}",
+        {
+            "type": "order_status_change",
+            "payload":{
+                "order_id": order_id,
+                "new_status": new_status
+            }
+        })
+    except:
+        pass
+
+
 
     return Response(
         {"detail": f"Order #{order_id} status updated to '{new_status}'."},
@@ -1217,7 +1231,37 @@ def set_order_waiting_for_delivery_api(request):
         }
 
     payload = build_payload(order, assigned_deliveryman)
+
+    dm_status = None
+    if assigned_deliveryman:
+        try:
+            dm_status = DeliverymanStatus.objects.filter(
+                deliveryman=assigned_deliveryman).first()
+        except:
+            dm_status = None
+
+    deliveryman_data = None
+    if assigned_deliveryman:
+        dm_user = getattr(assigned_deliveryman, "user", None)
+        dm_phone = None
+        if dm_user:
+            if hasattr(dm_user, "user_profile"):
+                dm_phone = getattr(dm_user.user_profile, "phone_number", None)
+            if not dm_phone and hasattr(dm_user, "merchant_profile"):
+                dm_phone = getattr(dm_user.merchant_profile,
+                                   "phone_number", None)
+        status_obj = getattr(assigned_deliveryman,'status',None)
+        deliveryman_data = {
+            "id": getattr(assigned_deliveryman, "pk", None),
+            "name": f"{getattr(assigned_deliveryman, 'Firstname', '') or ''} {getattr(assigned_deliveryman, 'Lastname', '') or ''}".strip(),
+            "email": getattr(dm_user, "email", None) if dm_user else None,
+            "phone": dm_phone,
+            "vehicle": getattr(assigned_deliveryman, "Vehicle", None),
+            "active_flag": getattr(status_obj, 'online',False) if status_obj is not None else False
+        }
+
     channel_layer = get_channel_layer()
+
 
     # CASE A = Restaurant already has a deliveryman assigned
     if assigned_deliveryman:
@@ -1237,13 +1281,23 @@ def set_order_waiting_for_delivery_api(request):
                 return Response({"detail": "Could not assign order."}, status=500)
 
             try:
-                print("already assigned...")
                 async_to_sync(channel_layer.group_send)(
                     f"deliveryman_{assigned_deliveryman.pk}",
                     {
                         "type": "direct_order_assignment",
                         "payload": payload,
                         "order_id": order_id
+                    }
+                )
+                async_to_sync(channel_layer.group_send)(
+                    f"order_{order_id}",
+                    {
+                        "type":"order_status_change",
+                        "payload":{
+                            "order_id": order_id,
+                            "new_status": "WAITING_FOR_DELIVERY",
+                            "deliveryman": deliveryman_data
+                        }
                     }
                 )
             except:
@@ -1253,7 +1307,6 @@ def set_order_waiting_for_delivery_api(request):
 
         # CASE A2 = Deliveryman is busy = broadcast
         try:
-            print("already assigned out for del")
             async_to_sync(channel_layer.group_send)(
                 "deliverymen",
                 {
@@ -1261,6 +1314,16 @@ def set_order_waiting_for_delivery_api(request):
                     "payload": payload,
                 }
             )
+            async_to_sync(channel_layer.group_send)(
+                    f"order_{order_id}",
+                    {
+                        "type":"order_status_change",
+                        "payload":{
+                            "order_id": order_id,
+                            "new_status": "WAITING_FOR_DELIVERY",
+                        }
+                    }
+                )
         except:
             pass
 
@@ -1268,7 +1331,6 @@ def set_order_waiting_for_delivery_api(request):
 
     # CASE B → No deliveryman found → broadcast
     try:
-        print("no assigned")
         async_to_sync(channel_layer.group_send)(
             "deliverymen",
             {
@@ -1276,6 +1338,16 @@ def set_order_waiting_for_delivery_api(request):
                 "payload": payload,
             }
         )
+        async_to_sync(channel_layer.group_send)(
+                    f"order_{order_id}",
+                    {
+                        "type":"order_status_change",
+                        "payload":{
+                            "order_id": order_id,
+                            "new_status": "WAITING_FOR_DELIVERY",
+                        }
+                    }
+                )
     except:
         pass
 
@@ -1287,7 +1359,6 @@ def set_order_waiting_for_delivery_api(request):
 def deliveryman_accept_order_api(request):
     Deliveryman = apps.get_model("merchant", "Deliveryman")
     Order = apps.get_model("merchant", "Order")
-
     deliveryman = getattr(request.user, 'deliveryman_profile', None)
     if not deliveryman:
         return Response({"detail": "User is not a deliveryman."}, status=400)
@@ -1296,6 +1367,10 @@ def deliveryman_accept_order_api(request):
     if not order_id:
         return Response({"detail": "order_id is required."}, status=400)
 
+    dm_status = getattr(deliveryman, "status", None)
+    if dm_status and dm_status.on_delivery:
+        return Response({"detail": "You are already on a delivery."}, status=400)
+
     try:
         order_id = int(order_id)
     except:
@@ -1303,26 +1378,28 @@ def deliveryman_accept_order_api(request):
 
     try:
         with transaction.atomic():
-            order = Order.objects.select_for_update().select_related(
-                'deliveryman').get(pk=order_id)
-            assigned_dm = getattr(order, 'deliveryman', None)
+            order = (
+                Order.objects
+                .select_for_update()
+                .select_related("deliveryman")
+                .get(pk=order_id)
+            )
+
+            assigned_dm = getattr(order, "deliveryman", None)
             if assigned_dm and assigned_dm.pk != deliveryman.pk:
                 return Response({"detail": "Order already assigned to another deliveryman."}, status=400)
+
             order.deliveryman = deliveryman
             order.assigned = True
-            order.save(update_fields=['deliveryman', 'assigned'])
+            order.save(update_fields=["deliveryman", "assigned"])
 
-            try:
-                from channels.layers import get_channel_layer
-                from asgiref.sync import async_to_sync
-                channel_layer = get_channel_layer()
-                async_to_sync(channel_layer.group_send)(
-                    f"deliveryman_{deliveryman.pk}",
-                    {"type": "current_delivery_update", "order_id": order.pk}
-                )
-            except:
-                pass
+            # DeliverymanStatus = apps.get_model("merchant", "DeliverymanStatus")
+            # dm_status, _ = DeliverymanStatus.objects.get_or_create(
+            #     deliveryman=deliveryman)
+            # dm_status.on_delivery = True
+            # dm_status.save(update_fields=["on_delivery"])
 
+        # additionally assign other waiting orders from same restaurant
         additionally_assigned_ids = []
         with transaction.atomic():
             candidate_qs = Order.objects.select_for_update().filter(
@@ -1331,6 +1408,7 @@ def deliveryman_accept_order_api(request):
                 assigned=False,
                 deliveryman__isnull=True
             ).exclude(pk=order.pk).order_by('order_date')
+
             for candidate in candidate_qs:
                 if not candidate.assigned and candidate.deliveryman is None:
                     candidate.deliveryman = deliveryman
@@ -1340,8 +1418,18 @@ def deliveryman_accept_order_api(request):
 
     except Order.DoesNotExist:
         return Response({"detail": "Order not found."}, status=404)
-    except:
+    except Exception:
         return Response({"detail": "Server error while accepting order."}, status=500)
+
+    # Channel layer send
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"deliveryman_{deliveryman.pk}",
+            {"type": "current_delivery_update", "order_id": order.pk}
+        )
+    except:
+        pass
 
     payload = {
         "type": "delivery_assignment",
@@ -1354,54 +1442,59 @@ def deliveryman_accept_order_api(request):
         "assigned_at": timezone.now().isoformat(),
     }
 
-    try:
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"deliveryman_{deliveryman.pk}",
-            {"type": "notify", "payload": payload}
-        )
-        async_to_sync(channel_layer.group_send)(
-            "deliverymen",
-            {
-                "type": "check_picked",
-                "payload": {
-                    "order_id": order.pk,
-                    "picked_by": deliveryman.pk,
-                    "picked_at": timezone.now().isoformat(),
-                }
-            }
-        )
+    status_obj = getattr(deliveryman, 'status', None)
+    dm_user = getattr(deliveryman, 'user', None)
+    dm_phone = None
+    if dm_user:
+        if hasattr(dm_user, 'user_profile'):
+            dm_phone = getattr(dm_user.user_profile, 'phone_number', None)
+        if not dm_phone and hasattr(dm_user, 'merchant_profile'):
+            dm_phone = getattr(dm_user.merchant_profile, 'phone_number', None)
 
-        for added_id in additionally_assigned_ids:
-            extra_payload = {
-                "type": "delivery_assignment",
-                "order": {"order_id": added_id},
-                "deliveryman": {
-                    "id": deliveryman.pk,
-                    "firstname": deliveryman.Firstname,
-                    "lastname": deliveryman.Lastname,
-                },
-                "assigned_at": timezone.now().isoformat(),
-            }
+    deliveryman_data = {
+        "id": getattr(deliveryman, "pk", None),
+        "full_name": f"{getattr(deliveryman, 'Firstname', '') or ''} {getattr(deliveryman, 'Lastname', '') or ''}".strip(),
+        "email": getattr(dm_user, "email", None) if dm_user else None,
+        "phone": dm_phone,
+        "vehicle": getattr(deliveryman, "Vehicle", None),
+        "active_flag": getattr(status_obj, 'online', False) if status_obj is not None else False
+    }
+
+    order_ids  = [order.pk] + additionally_assigned_ids
+    order_ids .sort()
+
+    channel_layer = get_channel_layer()
+    try:
+        for oid in order_ids:
             async_to_sync(channel_layer.group_send)(
-                f"deliveryman_{deliveryman.pk}",
-                {"type": "notify", "payload": extra_payload}
-            )
-            async_to_sync(channel_layer.group_send)(
-                "deliverymen",
+                f"order_{oid}",
                 {
-                    "type": "check_picked",
+                    "type":"deliveryman_accepted",
                     "payload": {
-                        "order_id": added_id,
-                        "picked_by": deliveryman.pk,
-                        "picked_at": timezone.now().isoformat(),
+                        "order_id": oid,
+                        "deliveryman": deliveryman_data
                     }
                 }
             )
+
+        async_to_sync(channel_layer.group_send)(
+            f"deliveryman_{deliveryman.pk}",
+            {
+                "type":"join_multiple_order_groups",
+                "order_ids":order_ids
+            }
+        )
     except:
         pass
 
-    return Response({"success": True, "data": {"requested_order": order.pk, "also_assigned_order_ids": additionally_assigned_ids, "deliveryman_id": deliveryman.pk}})
+
+    return Response({
+        "success": True,
+        "data": {
+            "order_ids": order_ids,
+            "deliveryman_data": deliveryman_data,
+        }
+    })
 
 
 @api_view(['GET'])
@@ -1505,6 +1598,8 @@ def user_order_details_api(request, id):
         "restaurant": restaurant_info,
         "deliveryman": deliveryman_info,
         "order_items": order_items_data,
+        "latitude": getattr(order, 'latitude', Decimal('0.00')),
+        "longitude": getattr(order, 'longitude', Decimal('0.00'))
     }
     status_value = getattr(order, 'status', '').upper()
 

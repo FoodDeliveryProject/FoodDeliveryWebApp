@@ -35,7 +35,7 @@ navigator.geolocation.getCurrentPosition(
       assigned = assigned_to_me;
       newDeliveryRequest = [];
       if(orders && orders.length>0){
-        orders.forEach((item)=> newDeliveryRequest.unshift(item));
+        orders.forEach((item)=> newDeliveryRequest.push(item));
       }
     } catch (err) {
       console.error("error: ", err);

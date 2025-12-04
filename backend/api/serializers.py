@@ -363,10 +363,24 @@ class OrderItemDetailSerializer(serializers.ModelSerializer):
 
 
 class DeliverymanSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
+    phone = serializers.SerializerMethodField()
+
     class Meta:
         model = Deliveryman
-        fields = ['id', 'name', 'email', 'phone']
+        fields = ['id', 'full_name', 'email', 'phone']
 
+    def get_full_name(self, obj):
+        return f"{getattr(obj, 'Firstname', '')} {getattr(obj, 'Lastname', '')}".strip()
+
+    def get_email(self, obj):
+        user = getattr(obj, 'user', None)
+        return getattr(user, 'email', None) if user else None
+
+    def get_phone(self, obj):
+        user = getattr(obj, 'user', None)
+        return getattr(user, 'phone', None) if user else None
 
 class OrderWithItemsSerializer(serializers.ModelSerializer):
     order_id = serializers.IntegerField(source='id', read_only=True)
