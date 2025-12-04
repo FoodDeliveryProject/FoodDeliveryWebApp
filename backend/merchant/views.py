@@ -117,8 +117,28 @@ def deliveryman_dashboard(request):
     except Deliveryman.DoesNotExist:
         return redirect('restaurant-dashboard')
 
+    total_completed_deliveries = OrderHistory.objects.filter(
+        deliveryman=profile
+    ).count()
+
+    total_active_deliveries = 0
+    total_active_deliveries = Order.objects.filter(
+        deliveryman=profile,
+        assigned=True,
+        status__in=['WAITING_FOR_DELIVERY', 'OUT_FOR_DELIVERY']
+    ).count()
+
+    total_new_deliveries = Order.objects.filter(
+        assigned=False,
+        deliveryman__isnull=True,
+        status="WAITING_FOR_DELIVERY"
+    ).count()
+
     return render(request, "merchant/deliveryman_dashboard.html", {
         'deliveryman': profile,
+        'total_new_deliveries':total_new_deliveries,
+        'total_active_deliveries': total_active_deliveries,
+        'total_completed': total_completed_deliveries,
     })
 
 
@@ -1246,7 +1266,6 @@ def bulk_update_order_status_api(request):
     order_ids = request.data.get('order_ids')
     deliveryman_location = request.data.get('deliveryman_location')
 
-
     if not order_ids or not isinstance(order_ids, (list, tuple)):
         return Response(
             {"detail": "'order_ids' is required and must be a list."},
@@ -1289,20 +1308,20 @@ def bulk_update_order_status_api(request):
                 {"detail": f"Error updating order {oid}: {str(exc)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     channel_layer = get_channel_layer()
     try:
         for order_id in order_ids:
             async_to_sync(channel_layer.group_send)(
-            f"order_{order_id}",
-            {
-                "type": "order_status_change",
-                "payload": {
-                    "order_id": order_id,
-                    "new_status": new_status,
-                    "deliveryman_location": deliveryman_location
+                f"order_{order_id}",
+                {
+                    "type": "order_status_change",
+                    "payload": {
+                        "order_id": order_id,
+                        "new_status": new_status,
+                        "deliveryman_location": deliveryman_location
+                    }
                 }
-            }
             )
     except Exception:
         pass
@@ -1314,6 +1333,7 @@ def bulk_update_order_status_api(request):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1381,7 +1401,7 @@ def archive_and_delete_order_api(request):
              "error": str(exc)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-    
+
     channel_layer = get_channel_layer()
 
     try:
@@ -1389,7 +1409,7 @@ def archive_and_delete_order_api(request):
             f"order_{order_id}",
             {
                 "type": "order_status_change",
-                "payload":{
+                "payload": {
                     "order_id": order_id,
                     "new_status": "DELIVERED"
                 }

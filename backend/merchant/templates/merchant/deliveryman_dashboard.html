@@ -19,15 +19,15 @@
  <div id="container-body">
         <div class="summary-card">
           <h3>Total New Deliveries</h3>
-          <p id="today-deliveries">0</p>
+          <p id="today-deliveries">{{total_new_deliveries}}</p>
         </div>
         <div class="summary-card">
           <h3>Pending Deliveries</h3>
-          <p id="pending-deliveries">0</p>
+          <p id="pending-deliveries">{{total_active_deliveries}}</p>
         </div>
         <div class="summary-card">
           <h3>Total Completed</h3>
-          <p id="completed-deliveries">0</p>
+          <p id="completed-deliveries">{{total_completed}}</p>
         </div>
       </div>
 {% endblock %}
