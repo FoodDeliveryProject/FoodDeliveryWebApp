@@ -652,63 +652,52 @@ def email_sent_view(request):
 
 @login_required
 def restaurant_dashboard(request):
+    from django.utils import timezone
+    from datetime import timedelta, datetime, timezone as dt_timezone
+    from django.db.models import Sum
+
     def format_number(num):
         num = float(num)
-
         if num >= 1_000_000_000:
             return f"{num/1_000_000_000:.1f}B"
         if num >= 1_000_000:
             return f"{num/1_000_000:.1f}M"
         if num >= 1_000:
             return f"{num/1_000:.1f}k"
-
         return str(int(num))
 
     obj, created = GoToDashClickCheck.objects.get_or_create(user=request.user)
     if not obj.go_to_dash_clicked:
         obj.go_to_dash_clicked = True
         obj.save()
-
     try:
         profile = Restaurant.objects.get(user=request.user)
     except Restaurant.DoesNotExist:
         return redirect('deliveryman-dashboard')
     fooditem_count = FoodItem.objects.filter(restaurant=profile).count()
     orders_count = Order.objects.filter(restaurant=profile).count()
-
-    total_customers = OrderHistory.objects.filter(restaurant=profile).values('user').distinct().count()
-
+    total_customers = OrderHistory.objects.filter(
+        restaurant=profile
+    ).values('user').distinct().count()
     total_revenue = OrderHistory.objects.filter(
         restaurant=profile
-    ).aggregate(
-        total=Sum('total_price')
-    )['total'] or 0
+    ).aggregate(total=Sum('total_price'))['total'] or 0
     formatted_total_revenue = format_number(total_revenue)
-    from django.utils import timezone
-    from datetime import timedelta
+
+    # --- Last 7 days orders sliding with today ---
     today = timezone.now().date()
-    seven_day_start = today - timedelta(days=6)
-
     base_qs = OrderHistory.objects.filter(restaurant=profile)
-
-    recent_window_qs = base_qs.filter(order_date__date__gte=seven_day_start, order_date__date__lte=today)
-
-    if recent_window_qs.exists():
-        window_end = today
-    else:
-        latest = base_qs.order_by('-order_date').first()
-        if latest:
-            window_end = latest.order_date.date()
-        else:
-            window_end = None
-
     last_7_days_orders = []
-    if window_end:
-        for d in range(0, 7):
-            day = window_end - timedelta(days=d)
-            count = base_qs.filter(order_date__date=day).count()
-            last_7_days_orders.append(count)
-    print(last_7_days_orders)
+
+    for d in range(6, -1, -1):  # 6 days ago → today
+        day = today - timedelta(days=d)
+        start = datetime.combine(day, datetime.min.time(), tzinfo=dt_timezone.utc)
+        end = datetime.combine(day, datetime.max.time(), tzinfo=dt_timezone.utc)
+        count = base_qs.filter(order_date__gte=start, order_date__lte=end).count()
+        last_7_days_orders.append(count)
+
+    print("Sliding last_7_days_orders:", last_7_days_orders)
+
     return render(request, "merchant/restaurant_dashboard.html", {
         'restaurant': profile,
         'fooditem_count': fooditem_count,
